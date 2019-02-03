@@ -10,6 +10,9 @@
 
 #define cimg_display 0
 #include "./CImg_latest/CImg-2.5.0_pre011819/CImg.h"
+#include <filesystem>
+#include <assert.h> 
+namespace fs = std::experimental::filesystem;
 
 using namespace Eigen;
 using namespace cimg_library;
@@ -18,17 +21,19 @@ using namespace std;
 std::vector< CImg<unsigned char>> loadImages()
 {
   std::vector< CImg<unsigned char>> imgs;
-  for (int i = 1; i < 10; ++i)
+  std::string path = "./images";
+  for (const auto & entry : fs::directory_iterator(path))
   {
-    std::string imgFileName = "face" + std::to_string(i) + ".jpg";
+    auto imgFileName = entry.path().string();
     CImg<unsigned char> img(imgFileName.c_str());
     imgs.push_back(img.RGBtoYCbCr().channel(0));
   }
   return imgs;
 }
 
-MatrixXd imgsToMatrix(std::vector<CImg<unsigned char>> imgs)
+MatrixXd imgsToMatrix(std::vector<CImg<unsigned char>>& imgs)
 {
+  assert(imgs.size() > 0); //no images loaded
   int nbrPixels = imgs[0].width() * imgs[0].height();
   MatrixXd imgsMatrix(imgs.size(), nbrPixels);
   for (int indexImg = 0; indexImg < imgs.size(); ++indexImg)
@@ -44,29 +49,29 @@ MatrixXd imgsToMatrix(std::vector<CImg<unsigned char>> imgs)
 
 MatrixXd calculateCovarianceMatrix(MatrixXd& data)
 {
-  int N = data.rows();
-  MatrixXd covarianceMatrix(N, N);
+  int N = data.cols();
   auto averagePerImg = data.rowwise().mean();
   VectorXd ones(N);
   ones.setZero();
-  covarianceMatrix = ((data - averagePerImg * ones.transpose()) * (data - averagePerImg * ones.transpose()).transpose()) / (N - 1) ;
+  auto covarianceMatrix = ((data - averagePerImg * ones.transpose()) * (data - averagePerImg * ones.transpose()).transpose()) / (N - 1) ;
   return covarianceMatrix;
 }
 
-std::vector<VectorXd> calculateEigenFaces(MatrixXd varianceCovarianceMatrix)
+std::vector<VectorXd> calculateEigenFaces(MatrixXd& varianceCovarianceMatrix)
 {
   std::vector<VectorXd> eigenFaces; 
   EigenSolver<MatrixXd> solver(varianceCovarianceMatrix);
   int maxIndex;
   solver.eigenvalues().real().maxCoeff(&maxIndex);
-  for (int i = 0; i < maxIndex; ++i)
+  int minIndex;
+  solver.eigenvalues().real().minCoeff(&minIndex);
+  for (int i = maxIndex; i <= minIndex; ++i)
   {
-    VectorXd eigenVector((solver.eigenvectors().col(i)).real());
+    VectorXd eigenVector((solver.eigenvectors().col(maxIndex)).real());
     eigenFaces.push_back(eigenVector);
   }
 
   return eigenFaces;
-  
 }
 
 int main(int argc, const char * argv[]) 
